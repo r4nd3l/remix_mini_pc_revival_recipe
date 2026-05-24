@@ -1,0 +1,26 @@
+# Editor backups
+*.bak
+*.orig
+*~
+*.swp
+*.swo
+
+# OS metadata
+.DS_Store
+Thumbs.db
+
+# Python
+__pycache__/
+*.pyc
+
+# Local build outputs (if anyone clones and builds inside the repo)
+build/
+*.o
+*.elf
+*.map
+
+# Personal artifacts that should NOT be committed
+root_key.pem
+*.pem
+uart.log
+*.cap
