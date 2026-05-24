@@ -37,6 +37,35 @@ You also need an **Armbian SD card image** (kernel + rootfs) — see below.
 The TOC0 SPL only replaces the bootloader portion; the kernel and rootfs
 on the SD remain Armbian's standard setup.
 
+## Quickest start — pre-built SD image
+
+If you don't want to assemble anything yourself, grab the ready-to-flash SD
+image from the [latest release](https://github.com/r4nd3l/remix_mini_pc_revival_recipe/releases/latest):
+
+- **`armbian-remix-mini-pc-v1.0.0.img.gz`** (363 MB compressed, 1.2 GB on disk)
+
+It's the official Armbian Pine64 24.11.1 minimal image with this project's
+TOC0 SPL pre-installed at sector 16, the vqmmc-patched bananapi-m64 DTB
+swapped into `/boot/dtb/allwinner/`, and `fdtfile=` set in `armbianEnv.txt`.
+The image has never been booted, so Armbian's first-login wizard runs fresh
+on the user's machine.
+
+```
+gunzip -c armbian-remix-mini-pc-v1.0.0.img.gz \
+  | sudo dd of=/dev/sdX bs=4M status=progress conv=fsync
+sync
+```
+
+Insert the SD into your Remix Mini PC, plug in power. That's it.
+
+If you want to know what's in the image or build your own from scratch
+(recommended for anything resembling production use, since the pre-built
+image is signed with my personal key), continue with the "Quick start"
+recipe below.
+
+SHA256 of the .gz: `87753fd64c1a84a54a96a88b88bdf068ec7e0903f216b9642f0f0661149d8b00`
+SHA256 of the unpacked .img: `2233b3b46e10e9d58ed2c49bb160abe90697922e523329a97c9ce4508fbe9b66`
+
 ## Quick start (use the pre-built SPL)
 
 1. Flash a standard Armbian image to an SD card:
