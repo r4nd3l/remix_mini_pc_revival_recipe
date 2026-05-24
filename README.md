@@ -230,15 +230,24 @@ To recover after a botched flash:
 
 ## Companion blog posts
 
-The story behind these files, including the year-long detour through "the
-eMMC is locked." Each post is also included in the `posts/` directory of
-this repo as a local copy, in case dev.to or external links go away.
+The full story behind these files, published on dev.to. Each post is also
+mirrored in the `posts/` directory of this repo, in case external links go away.
 
-1. *After a Year of Dead Ends, the eMMC Finally Talks* — [posts/01-emmc-breakthrough-vqmmc-supply.md](posts/01-emmc-breakthrough-vqmmc-supply.md)
-2. *Confirming What Stands Between Us and Cold Boot* — [posts/02-secure-boot-confirmed-toc0.md](posts/02-secure-boot-confirmed-toc0.md)
-3. *The Day It Finally Booted Itself* — [posts/03-toc0-cold-boot-victory.md](posts/03-toc0-cold-boot-victory.md)
-4. *The Same SD Card Boots the No-NAND Variant Too* — [posts/04-no-nand-variant-works-too.md](posts/04-no-nand-variant-works-too.md)
-5. *Moving the Whole Operating System Onto the eMMC* — [posts/05-emmc-migration-no-more-sd-card.md](posts/05-emmc-migration-no-more-sd-card.md)
+1. *Remix Mini PC: After a Year of Dead Ends, the eMMC Finally Talks*
+   — [dev.to](https://dev.to/matemiller/remix-mini-pc-after-a-year-of-dead-ends-the-emmc-finally-talks-16p6)
+   · [local copy](posts/01-emmc-breakthrough-vqmmc-supply.md)
+2. *Remix Mini PC: Confirming What Stands Between Us and Cold Boot*
+   — [dev.to](https://dev.to/matemiller/remix-mini-pc-confirming-what-stands-between-us-and-cold-boot-5b12)
+   · [local copy](posts/02-secure-boot-confirmed-toc0.md)
+3. *Remix Mini PC: The Day It Finally Booted Itself*
+   — [dev.to](https://dev.to/matemiller/remix-mini-pc-the-day-it-finally-booted-itself-o2l)
+   · [local copy](posts/03-toc0-cold-boot-victory.md)
+4. *Remix Mini PC: The Same SD Card Boots the No-NAND Variant Too*
+   — [dev.to](https://dev.to/matemiller/remix-mini-pc-the-same-sd-card-boots-the-no-nand-variant-too-4p0h)
+   · [local copy](posts/04-no-nand-variant-works-too.md)
+5. *Remix Mini PC: Moving the Whole Operating System Onto the eMMC*
+   — [dev.to](https://dev.to/matemiller/remix-mini-pc-moving-the-whole-operating-system-onto-the-emmc-h3h)
+   · [local copy](posts/05-emmc-migration-no-more-sd-card.md)
 
-The dev.to versions (when published) will be linked from the author's
-profile at <https://dev.to/matemiller>.
+The full series and the author's other writing live at
+<https://dev.to/matemiller>.
