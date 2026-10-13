@@ -46,7 +46,26 @@ therefore not a lie. What is missing is the gate: SYS_EPHY_CTL0.
    during the probe, the link comes up, but by then the probe's 100 ms reset poll has already
    lost the race.
 
-## Next options
+5. **v3 overlay** (`overlays/ac200-eth-v3.dts`): RMII instead of MII (EPHY_CTL = 3814). Same
+   probe-time reset timeout.
+6. Do **not** poke CCU/syscon/EMAC registers through `/dev/mem` to test this: one such probe
+   froze the board hard (power cycle needed).
+
+## The fix: a one-line kernel patch
+
+`kernel/cs-dwmac-sun8i-tolerate-probe-reset.patch`: with an external PHY, a failed probe-time
+reset only warns instead of tearing the device down. The MAC is set up again on open, when the
+PHY is attached and clocking. Built with the Armbian framework at tag v26.5.1:
+
+```
+cp kernel/cs-dwmac-sun8i-tolerate-probe-reset.patch <armbian-build>/userpatches/kernel/archive/sunxi-6.18/
+./compile.sh kernel BOARD=pine64 BRANCH=current KERNELBRANCH=tag:v6.18.33 KERNEL_CONFIGURE=no
+```
+
+Install the `linux-image-current-sunxi64` and `linux-dtb-current-sunxi64` debs from `output/debs`,
+then `apt-mark hold` both so an Armbian update does not drop the patch.
+
+## Older options
 
 - A small out-of-tree module, or a one-line kernel patch, to clear BMCR power-down
   over MDIO before the probe-time reset, or to retry that reset after the PHY is attached.
