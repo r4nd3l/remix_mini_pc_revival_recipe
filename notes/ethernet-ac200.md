@@ -1,50 +1,66 @@
-# Wired Ethernet on the Remix Mini PC — where it stands (2026-10-13)
+# Wired Ethernet on the Remix Mini PC (AC200): status as of 2026-10-13
 
 Board: Jide Remix Mini PC (Allwinner H64 = A64), Armbian 26.5.1, kernel 6.18.33-current-sunxi64,
-`fdtfile=allwinner/sun50i-h64-remix-mini-pc.dtb`, user overlay `overlays/ac200-eth.dtbo`.
+`fdtfile=allwinner/sun50i-h64-remix-mini-pc.dtb`, user overlay `ac200-eth`.
 
-## Symptom
-
-No `eth0`. The EMAC driver gives up at boot, and the same when re-bound by hand later:
+## The symptom
 
 ```
 dwmac-sun8i 1c30000.ethernet: EMAC reset timeout
 dwmac-sun8i 1c30000.ethernet: probe with driver dwmac-sun8i failed with error -110
 ```
 
-## What works
+## What the registers say
 
-- The AC200 answers on I2C (`i2c0`, address 0x10); `ac200-ephy-ctl` binds.
-- The EPHY rails come up (`vcc-ephy-2v5`, `vcc-ephy-1v8`, `vcc-ephy-1v2`).
+The AC200 sits on i2c0 at 0x10. It is big-endian on the wire, and it is paged through
+register 0xfe. Read it with `i2cget -f -y 1 0x10 <reg> w`, then swap the bytes. The kernel regmap
+caches the page selector, so restore 0xfe after poking at it. The cleanest way to read is root
+`cat /sys/kernel/debug/regmap/1-0010-AC200/registers`.
 
-## What does not — the likely cause
+| reg | value | meaning |
+|---|---|---|
+| 0x0000 | 0101 | chip id: the AC200 answers |
+| 0x0008 SYS_CLK_CTL | 0007 | CKI_24M input enabled; SYS_CLK comes from the pin |
+| 0x6000 EPHY_CTL | 3014 | MII, PHY address 1, 24 MHz, powered up (SHUTDOWN = 0) |
+| **0x0014 SYS_EPHY_CTL0** | **0000** | **EPHY clock gated off and held in reset** |
 
-The overlay feeds the AC200 from
+The 24 MHz reference arrives: the AC200 has no 24 MHz oscillator of its own (datasheet
+§9.5.5), so something on the board feeds CKI_24M. The `fixed-clock` in the v1 overlay is
+therefore not a lie. What is missing is the gate: SYS_EPHY_CTL0.
 
-```
-ac200-clk { compatible = "fixed-clock"; clock-frequency = <24000000>; };
-```
+## The experiments
 
-A `fixed-clock` only *tells* Linux a 24 MHz clock exists; nothing on the board is made to produce it.
-On other AC200 boards (H6 TV boxes) that clock comes from a SoC **PWM output** driven at 24 MHz.
-On this unit no PWM device is enabled at all (`/sys/bus/platform/devices` has none), so the
-EPHY most likely has no clock, gives the MAC no RX clock, and the MAC's soft reset never completes —
-which is exactly what "EMAC reset timeout" means. Re-binding later (probe-order theory) fails the
-same way, which rules that theory out.
+1. `SYS_EPHY_CTL0 = 0x0003` by hand, then re-bind the EMAC. **The link comes up:
+   `Link is Up - 100Mbps/Full`.** The PHY works and sees the cable.
+2. phylib then put the PHY back into reset (0x0014 read 0x0002 afterwards). The v1 overlay gives
+   the PHY node `resets`/`clocks` pointing at `ac200-ephy-ctl`, and an unattached PHY is held in
+   reset. This also makes the ID read fail, so it binds as "Generic PHY".
+3. **v2 overlay** (`overlays/ac200-eth-v2.dts`): the PHY node has no `resets`/`clocks` and is
+   matched by id (`ethernet-phy-id0044.1400`). `system/cs-ac200-eth.sh` (a boot oneshot) loads
+   the AC200 modules, sets SYS_EPHY_CTL0 = 0x0003 and binds the EMAC. After a reboot,
+   0x0014 stays at 0003.
+4. It still fails. `dwmac-sun8i` (v6.18, `sun8i_dwmac_probe`) ends with `sun8i_dwmac_reset()`
+   for an external PHY. That reset needs the MII RX/TX clocks from the PHY at that moment.
+   The PHY has not been attached or resumed through MDIO yet; that only happens on `open`, so
+   its clocks are most likely still off (BMCR power-down?). When networkd opens the interface
+   during the probe, the link comes up, but by then the probe's 100 ms reset poll has already
+   lost the race.
 
-## Next experiment
+## Next options
 
-1. Find which pin feeds the AC200 clock on this board (original Android `script.bin`/FEX, or the
-   board photos: trace from the AC200's 24M input). Candidate: A64 `PWM0` on **PD22** — note the
-   overlay currently claims PD22 for `emac` in `mii-pins`; plain MII does not need all of PD8–PD23.
-2. Overlay: enable `&pwm`, give PD22 to `pwm0`, and replace `ac200-clk` with a `pwm-clock`
-   (`compatible = "pwm-clock"; pwms = <&pwm 0 42 0>;` → 41.67 ns ≈ 24 MHz).
-3. Reboot, check `dmesg | grep -i -E "ac200|dwmac|eth0"`.
+- A small out-of-tree module, or a one-line kernel patch, to clear BMCR power-down
+  over MDIO before the probe-time reset, or to retry that reset after the PHY is attached.
+- Find out whether the AC200 EPHY powers up with BMCR.PDOWN set, and whether an AC200
+  register forces it. Datasheet §9.11 (EPHY) does not show it.
+- Meanwhile: a USB Ethernet adapter (RTL8153/AX88179, mainline drivers).
 
-A failed overlay does not stop the boot (U-Boot skips it); FEL recovery stays possible regardless.
+## Done in this round (also on the device)
 
-## Meanwhile
-
-A USB Ethernet adapter (RTL8152/8153 or AX88179 — mainline drivers) gives a wired link today and
-lets the staging `r8723bs` Wi-Fi driver be switched off, which is the prime suspect for the freezes
-(2026-10-11 link drops, 2026-10-12 and 2026-10-13 hard freezes).
+- Wi-Fi: `system/r8723bs.conf`. `rtw_ips_mode=0` turns off inactive power save, a known source
+  of r8723bs drop-outs and hangs. `rtw_power_mgnt=0` was already set.
+- Cooling: `system/cpu-governor.tmpfiles.conf` sets `schedutil` instead of `performance`
+  pinned at 1008 MHz. Idle went from 63 °C to about 53 °C. Trip points: 70 passive / 80 hot /
+  90 critical.
+- Logs: `system/journald-persistent.conf`, plus `ENABLED=false` in `/etc/default/armbian-ramlog`,
+  so the journal survives a freeze or a reboot. Before this, the last hours before each freeze
+  were lost.

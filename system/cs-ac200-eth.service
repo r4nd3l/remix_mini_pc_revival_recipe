@@ -1,0 +1,13 @@
+[Unit]
+Description=Wired Ethernet via the AC200 PHY (Remix Mini PC)
+After=systemd-modules-load.service
+Before=network-pre.target
+Wants=network-pre.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/cs-ac200-eth.sh
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
