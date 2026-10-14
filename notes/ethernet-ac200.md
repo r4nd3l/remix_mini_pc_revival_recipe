@@ -1,4 +1,4 @@
-# Wired Ethernet on the Remix Mini PC (AC200): status as of 2026-10-13
+# Wired Ethernet on the Remix Mini PC (AC200) — investigation log (SOLVED 2026-10-14, see the end and the README)
 
 Board: Jide Remix Mini PC (Allwinner H64 = A64), Armbian 26.5.1, kernel 6.18.33-current-sunxi64,
 `fdtfile=allwinner/sun50i-h64-remix-mini-pc.dtb`, user overlay `ac200-eth`.
@@ -148,3 +148,7 @@ What made it work, in order of importance:
 `system/05-cs-eth0.network` replaces `05-cs-eth0-off.network`: DHCP, metric 100 (wlan0 600 stays
 as the fallback), RequiredForOnline=no. `cs-ac200-eth.service` stays disabled (obsolete).
 Still to verify: a cold boot brings eth0 up by itself.
+
+`system/cs-ac200-eth.{service,sh}` (the I2C-poking boot oneshot from v2) are removed from the
+repo — v6 needs no script, and the pokes corrupt the AC200 page selector. They remain in the
+git history.
