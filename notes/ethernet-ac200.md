@@ -80,7 +80,9 @@ The AC200 side matches the working H6 boxes (SYS_EPHY_CTL0 = 0003, SYS_EPHY_CTL1
 enabled). Getting further needs the schematic or a scope on PD19 (ETXCK). The factory config was in
 neither the eMMC dumps nor anywhere online.
 
-**Decision:** use a USB Ethernet adapter (RTL8153). The onboard port is kept down with
+**Decision (revised 2026-10-14): no USB adapter — the onboard port has to work.** Next leads: the
+factory Remix OS image (its DTB/sys_config shows how the AC200 xMII is wired), the AC200 IO/pin-mux
+registers, then a scope on PD19 (ETXCK). Until then The onboard port is kept down with
 `system/05-cs-eth0-off.network` (in `/etc/systemd/network/`), and `cs-ac200-eth.service` is disabled.
 Otherwise the TX watchdog resets the adapter every ~6 s. The patched kernel stays installed and held.
 
