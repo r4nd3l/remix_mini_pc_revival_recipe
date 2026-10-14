@@ -1,0 +1,98 @@
+/*
+ * Remix Mini PC (H64 = A64): wired Ethernet through the AC200 EPHY, v4.
+ * v4: the AC200 is clocked from the SoC, not a crystal. The factory Remix OS driver
+ * (BSP acx00-core.c) does pwm_request(16) + pwm_config(20, 41): PWM 16 is the s_pwm
+ * (factory DTB pwm-base = 0x10), i.e. R_PWM channel 0 on PL10, run at ~24 MHz.
+ * Here: R_PWM in bypass (period 42 ns -> the 24 MHz oscillator straight out on PL10),
+ * wrapped as a "pwm-clock" (CONFIG_COMMON_CLK_PWM) that the AC200 node consumes.
+ * Factory sys_config [gmac0]: phy-mode rmii, PD10/11/13/17/18/19/20/22/23, delays 0.
+ *
+ * v1/v2 ran the MAC in MII mode; the board is wired for RMII (as on the H6 AC200 boxes),
+ * so in MII the MAC waited for an RX/TX clock on pins nothing drives -> "EMAC reset timeout".
+ * The PHY node carries no resets/clocks: phylib must not hold it in reset (see notes).
+ * Build: dtc -@ -I dts -O dtb -o ac200-eth.dtbo ac200-eth-v4.dts
+ */
+/dts-v1/;
+/plugin/;
+
+&{/} {
+	ac200_clk: ac200-clk {
+		compatible = "pwm-clock";
+		#clock-cells = <0>;
+		clock-frequency = <24000000>;
+		pwms = <&r_pwm 0 42 0>;
+	};
+};
+
+&r_pwm {
+	status = "okay";
+};
+
+&sid {
+	ephy_calib: ephy-calib@2c { reg = <0x2c 0x2>; };
+	ac200_bg: ac200-bg@30 { reg = <0x30 0x2>; };
+};
+
+&reg_dldo2 {
+	regulator-min-microvolt = <2500000>;
+	regulator-max-microvolt = <2500000>;
+	regulator-always-on;
+	regulator-name = "vcc-ephy-2v5";
+};
+
+&reg_eldo2 {
+	regulator-min-microvolt = <1800000>;
+	regulator-max-microvolt = <1800000>;
+	regulator-always-on;
+	regulator-name = "vcc-ephy-1v8";
+};
+
+&reg_fldo1 {
+	regulator-min-microvolt = <1200000>;
+	regulator-max-microvolt = <1200000>;
+	regulator-always-on;
+	regulator-name = "vcc-ephy-1v2";
+};
+
+&i2c0 {
+	#address-cells = <1>;
+	#size-cells = <0>;
+
+	ac200: mfd@10 {
+		compatible = "x-powers,ac200";
+		reg = <0x10>;
+		clocks = <&ac200_clk>;
+		interrupt-controller;
+		#interrupt-cells = <1>;
+		nvmem-cells = <&ac200_bg>;
+		nvmem-cell-names = "bandgap";
+
+		ac200_ephy_ctl: syscon {
+			compatible = "x-powers,ac200-ephy-ctl";
+			nvmem-cells = <&ephy_calib>;
+			nvmem-cell-names = "calibration";
+			#clock-cells = <0>;
+			#reset-cells = <0>;
+			phy-mode = "rmii";
+			x-powers,led-polarity = <0>;
+			phy-address = <1>;
+			status = "okay";
+		};
+	};
+};
+
+&mdio {
+	ext_ephy: ethernet-phy@1 {
+		compatible = "ethernet-phy-id0044.1400", "ethernet-phy-ieee802.3-c22";
+		reg = <1>;
+	};
+};
+
+&emac {
+	pinctrl-names = "default";
+	pinctrl-0 = <&rmii_pins>;
+	phy-mode = "rmii";
+	phy-handle = <&ext_ephy>;
+	phy-supply = <&reg_dldo2>;
+	status = "okay";
+};

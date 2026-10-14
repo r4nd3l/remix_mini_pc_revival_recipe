@@ -4,7 +4,8 @@ A self-contained set of files for reviving the Jide Remix Mini PC (RM1G / RM2G),
 that it boots Linux from internal storage without needing a laptop and FEL sideload.
 
 Hardware: Allwinner H64 SoC (= rebadged A64), 2 GB RAM, 16 GB eMMC,
-WiFi (rtl8723bs), HDMI, USB 2.0. No wired Ethernet.
+WiFi (rtl8723bs), HDMI, USB 2.0, and 10/100 wired Ethernet through the AC200
+companion chip, which needs the extra steps in [Wired Ethernet](#wired-ethernet-the-ac200-port).
 
 > **Confirmed on two unit variants**: the standard RM1G/RM2G with eMMC, and a
 > board with the eMMC chip removed. The same SD card boots either. No
@@ -31,6 +32,17 @@ source/
   remix-mini-pc_defconfig         U-Boot defconfig - copy into configs/ before make.
 scripts/
   flash-toc0-to-sd.sh             One-liner to write the SPL to an SD card.
+kernel/
+  cs-dwmac-sun8i-tolerate-probe-reset.patch   Kernel patch for the wired Ethernet.
+overlays/
+  ac200-eth-v6.dts                Device-tree overlay for the wired Ethernet (v1-v5: history).
+system/
+  05-cs-eth0.network              systemd-networkd: DHCP on eth0, preferred over Wi-Fi.
+  r8723bs.conf                    Wi-Fi power saving off (fewer drop-outs).
+  cpu-governor.tmpfiles.conf      schedutil instead of a pinned governor (runs cooler).
+  journald-persistent.conf        Keep the journal across crashes.
+notes/
+  ethernet-ac200.md               The full Ethernet investigation, register by register.
 ```
 
 You also need an **Armbian SD card image** (kernel + rootfs) — see below.
@@ -232,6 +244,108 @@ head -c 8 u-boot-sunxi-with-spl.bin | xxd
 
 The `u-boot-sunxi-with-spl.bin` is what goes onto the SD card.
 
+## Wired Ethernet (the AC200 port)
+
+The RJ45 port is not driven by the SoC alone. Its PHY lives in an **X-Powers AC200**
+companion chip (on I2C, address 0x10) and talks to the A64's EMAC over **RMII**. Stock
+Armbian brings none of it up. Three things make it work (tested on Armbian 26.5.1,
+kernel 6.18.33, `BOARD=pine64`, `fdtfile=allwinner/sun50i-h64-remix-mini-pc.dtb`):
+
+1. **The AC200's 24 MHz clock comes from the SoC**, not from a crystal: the factory
+   Remix OS kernel runs R_PWM channel 0 on pin **PL10** at ~24 MHz (found in the factory
+   image's `sys_config.fex`, DTB and the BSP `acx00` driver). The overlay re-creates that
+   as a `pwm-clock` (period 42 ns, which the sun4i-pwm driver turns into a straight
+   bypass of the 24 MHz oscillator).
+2. **The PHY node owns the AC200 EPHY clock gate and reset**, with
+   `reset-names = "phy"` so phylib finds the reset and releases it when the port opens.
+3. **A one-line kernel patch**: the AC200 drivers are modules and load after the EMAC
+   probes, so the EMAC's probe-time reset times out without a clock. Stock
+   `dwmac-sun8i` then tears the device down; the patch makes it warn and carry on.
+   The MAC is reset again, clocked, when the interface opens.
+
+Result: 100 Mbit/s full duplex, DHCP, ~43 Mbit/s measured with zero errors, and it
+comes up on its own after a cold boot.
+
+### 1. Build and install the patched kernel
+
+On an x86-64 or arm64 Linux host with the
+[Armbian build framework](https://github.com/armbian/build) (tag `v26.5.1`):
+
+```
+cp kernel/cs-dwmac-sun8i-tolerate-probe-reset.patch \
+   <armbian-build>/userpatches/kernel/archive/sunxi-6.18/
+cd <armbian-build>
+./compile.sh kernel BOARD=pine64 BRANCH=current KERNELBRANCH=tag:v6.18.33 \
+             KERNEL_CONFIGURE=no KERNEL_GIT=shallow
+```
+
+Copy `output/debs/linux-image-current-sunxi64_*.deb` and
+`linux-dtb-current-sunxi64_*.deb` to the Remix, then:
+
+```
+sudo dpkg -i linux-image-current-sunxi64_*.deb linux-dtb-current-sunxi64_*.deb
+sudo apt-mark hold linux-image-current-sunxi64 linux-dtb-current-sunxi64
+```
+
+The hold stops a routine `apt upgrade` from replacing it with the unpatched kernel.
+Keep the stock debs somewhere as a fallback.
+
+### 2. Install the overlay
+
+```
+dtc -@ -I dts -O dtb -o ac200-eth.dtbo overlays/ac200-eth-v6.dts
+sudo mkdir -p /boot/overlay-user
+sudo cp ac200-eth.dtbo /boot/overlay-user/
+```
+
+and in `/boot/armbianEnv.txt`:
+
+```
+overlay_prefix=sun50i-a64
+user_overlays=ac200-eth
+```
+
+### 3. Network config
+
+```
+sudo cp system/05-cs-eth0.network /etc/systemd/network/
+```
+
+It asks for DHCP on `eth0` with route metric 100, so the cable wins over Wi-Fi
+(metric 600), which stays up as the fallback. `RequiredForOnline=no` keeps the boot
+from waiting when no cable is plugged in.
+
+### 4. Power-cycle
+
+Pull the power and plug it back in; the overlay is applied by U-Boot at boot. **On this
+board a warm `reboot` may hang after "Journal stopped"**: power-cycle instead. Then:
+
+```
+networkctl status eth0        # routable, with a DHCP address
+ip route                      # default via eth0 metric 100, wlan0 metric 600
+```
+
+Do not poke the AC200 over I2C by hand while the kernel drivers own it: it is paged
+through register 0xfe and the kernel caches the page, so a stray write leaves it on the
+wrong page. Read it through `/sys/kernel/debug/regmap/1-0010-AC200/registers` instead.
+
+## Known limitation: no audio
+
+The analog codec probes and the mixer works, but playback and capture fail
+straight away with `Input/output error`. The I2S block runs, yet its TX FIFO
+stays empty and the DMA controller never raises an interrupt.
+
+Most likely cause: on a secure-boot-fused chip the DMA channels start out
+secure-only. TF-A's `sunxi_security_setup()` writes `DMA_SEC` (offset 0x20)
+to hand them to the normal world, but at that point the DMA bus clock is
+still gated, so the write is probably lost. This has not been verified,
+because it would need raw register access. A plain Pine64 is not fused, so
+it never shows the problem.
+
+Probable fix (untested): patch BL31 to ungate the DMA clock and deassert its
+reset before that write, then rebuild the TOC0 SPL. Test it from an SD card
+first. Not needed for a headless server, so it has been left alone.
+
 ## Recovery if something breaks
 
 The BROM **always** falls back to FEL mode when nothing else boots, and FEL
@@ -256,6 +370,11 @@ To recover after a botched flash:
   `arch/arm64/boot/dts/allwinner/sun50i-h64-remix-mini-pc.dts`
 - `linux-sunxi.org/Jide_Remix_Mini` — the wiki page where I finally read the
   sentence about the secure-boot fuse and believed it.
+- The factory image `factory_image_rm1g_B2016110301-secure.img` (Remix OS 2.0.626, on the
+  OSDN mirrors under `remixos/66607/`) and the Allwinner BSP driver `drivers/mfd/acx00-core.c`
+  — where the AC200's PWM clock on PL10 turned up.
+- The AC200 MFD and EPHY drivers by Jernej Škrabec and Andre Przywara, as carried by Armbian (`sunxi-6.18` patches),
+  and the H6 boards' device trees that wire them.
 
 ## Companion blog posts
 
