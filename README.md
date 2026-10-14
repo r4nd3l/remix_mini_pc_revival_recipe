@@ -329,6 +329,23 @@ Do not poke the AC200 over I2C by hand while the kernel drivers own it: it is pa
 through register 0xfe and the kernel caches the page, so a stray write leaves it on the
 wrong page. Read it through `/sys/kernel/debug/regmap/1-0010-AC200/registers` instead.
 
+## Known limitation: no audio
+
+The analog codec probes and the mixer works, but playback and capture fail
+straight away with `Input/output error`. The I2S block runs, yet its TX FIFO
+stays empty and the DMA controller never raises an interrupt.
+
+Most likely cause: on a secure-boot-fused chip the DMA channels start out
+secure-only. TF-A's `sunxi_security_setup()` writes `DMA_SEC` (offset 0x20)
+to hand them to the normal world, but at that point the DMA bus clock is
+still gated, so the write is probably lost. This has not been verified,
+because it would need raw register access. A plain Pine64 is not fused, so
+it never shows the problem.
+
+Probable fix (untested): patch BL31 to ungate the DMA clock and deassert its
+reset before that write, then rebuild the TOC0 SPL. Test it from an SD card
+first. Not needed for a headless server, so it has been left alone.
+
 ## Recovery if something breaks
 
 The BROM **always** falls back to FEL mode when nothing else boots, and FEL
