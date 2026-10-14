@@ -65,6 +65,28 @@ cp kernel/cs-dwmac-sun8i-tolerate-probe-reset.patch <armbian-build>/userpatches/
 Install the `linux-image-current-sunxi64` and `linux-dtb-current-sunxi64` debs from `output/debs`,
 then `apt-mark hold` both so an Armbian update does not drop the patch.
 
+## Result with the patched kernel (2026-10-14): the clock never reaches the MAC
+
+The probe survives, the PHY binds as `Allwinner AC200 EPHY`, and `Link is Up - 100Mbps/Full`.
+But RX stays at 0 packets and TX hits `NETDEV WATCHDOG ... transmit queue 0 timed out`.
+`ethtool -d eth0 raw on` shows EMAC_BASIC_CTL1 = 0x08000001: the soft-reset bit never clears,
+so the MAC gets no RX/TX clock from the PHY. Everything below was tried, and all of it gave the same result:
+
+- RMII (syscon 0x30 = 0x2001) and MII;
+- AC200 CLK_SEL for 24 MHz and for 25 MHz, including an EPHY reset pulse after the switch;
+- pinmux: PD10-PD23 are all on `emac` (pinctrl debugfs).
+
+The AC200 side matches the working H6 boxes (SYS_EPHY_CTL0 = 0003, SYS_EPHY_CTL1 = 000f with MII IO
+enabled). Getting further needs the schematic or a scope on PD19 (ETXCK). The factory config was in
+neither the eMMC dumps nor anywhere online.
+
+**Decision:** use a USB Ethernet adapter (RTL8153). The onboard port is kept down with
+`system/05-cs-eth0-off.network` (in `/etc/systemd/network/`), and `cs-ac200-eth.service` is disabled.
+Otherwise the TX watchdog resets the adapter every ~6 s. The patched kernel stays installed and held.
+
+Also seen: a warm `systemctl reboot` hung after "Journal stopped", and only a power cycle brought
+the board back. Do not reboot remotely.
+
 ## Older options
 
 - A small out-of-tree module, or a one-line kernel patch, to clear BMCR power-down

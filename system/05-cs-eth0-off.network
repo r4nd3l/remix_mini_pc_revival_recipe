@@ -1,0 +1,6 @@
+[Match]
+Name=eth0
+
+[Link]
+ActivationPolicy=down
+RequiredForOnline=no
