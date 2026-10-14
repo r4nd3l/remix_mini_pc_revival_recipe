@@ -130,3 +130,21 @@ pokes are not trustworthy alongside the kernel regmap.
 **v5** (`overlays/ac200-eth-v5.dts`): v4 + the PHY node takes `clocks`/`resets = <&ac200_ephy_ctl>`
 (the H6 way): the ac200-phy driver enables the gate at probe, phylib releases the reset at attach.
 No script. Possible now that the patched dwmac-sun8i survives the failed probe-time reset.
+
+## 2026-10-14 evening: it works (v6)
+
+v6 boot: SYS_EPHY_CTL0 = 0003 set by the kernel (gate by the ac200-phy probe, reset released by
+phylib), no script. `ip link set eth0 up` → EMAC_BASIC_CTL1 = 0x08000000 (soft reset done), PHY
+real (ID 0044:1400, BMSR 79ed = link + AN complete, link partner c5e1), 100/Full. RX and TX both
+count, no NETDEV WATCHDOG. IPv6 all-nodes ping answered by the LAN; DHCP 192.168.10.226;
+50 MB download over eth0 at ~43 Mbit/s, 0 errors; ping 1.1.1.1 via eth0 OK.
+
+What made it work, in order of importance:
+1. **The AC200 clock is R_PWM on PL10** (factory BSP `pwm_request(16)`), not a crystal — v4.
+2. The PHY node owns the EPHY gate + reset, **with `reset-names = "phy"`** — v6.
+3. The kernel patch letting dwmac-sun8i survive the failed probe-time reset (the AC200 modules
+   load after the EMAC probes); the MAC is reset again, clocked, at open.
+
+`system/05-cs-eth0.network` replaces `05-cs-eth0-off.network`: DHCP, metric 100 (wlan0 600 stays
+as the fallback), RequiredForOnline=no. `cs-ac200-eth.service` stays disabled (obsolete).
+Still to verify: a cold boot brings eth0 up by itself.
