@@ -107,3 +107,26 @@ the board back. Do not reboot remotely.
 - Logs: `system/journald-persistent.conf`, plus `ENABLED=false` in `/etc/default/armbian-ramlog`,
   so the journal survives a freeze or a reboot. Before this, the last hours before each freeze
   were lost.
+
+## 2026-10-14 afternoon: the factory image, and the first MAC clock
+
+Factory image `factory_image_rm1g_B2016110301-secure.img` (Remix OS 2.0.626, OSDN mirror
+`mirrors.gigenet.com/OSDN/remixos/66607/`, 1.16 GB, IMAGEWTY, not encrypted). Inside:
+
+- `sys_config.fex` `[gmac0]`: **RMII**, PD10/11 (RXD1/0), PD13 (RXDV), PD17/18 (TXD1/0),
+  PD19 (TXCLK = RMII ref clock in), PD20 (TXEN), PD22/23 (MDC/MDIO), drive 3, tx/rx-delay 0.
+  PD14 (RXERR) is *not* used by the factory (mainline `rmii_pins` claims it; harmless so far).
+- Factory kernel (BSP 3.10, `acx00-core.c`): `pwm_request(16)` + `pwm_config(20, 41)` — the AC200
+  is clocked **from the SoC**: PWM 16 = `s_pwm` (factory DTB `pwm-base = 0x10`) = R_PWM ch0 on
+  **PL10**, ~24 MHz. No crystal. v1–v3 declared a fixed 24 MHz clock that did not exist.
+
+**v4** (`overlays/ac200-eth-v4.dts`): R_PWM enabled, `pwm-clock` with period 42 ns → the sun4i-pwm
+driver bypasses to the 24 MHz oscillator on PL10 (`/sys/kernel/debug/pwm`: enabled 21/42 ns,
+PL10 muxed `s_pwm`). With SYS_EPHY_CTL0 opened (cs-ac200-eth.sh) **EMAC_BASIC_CTL1 = 0x08000000:
+the MAC soft reset completes for the first time.** But the PHY then lost the link (BMSR 79c9,
+LPA 0000), and the script's page-selector restore had left the AC200 on page 0x00a1 — the I2C
+pokes are not trustworthy alongside the kernel regmap.
+
+**v5** (`overlays/ac200-eth-v5.dts`): v4 + the PHY node takes `clocks`/`resets = <&ac200_ephy_ctl>`
+(the H6 way): the ac200-phy driver enables the gate at probe, phylib releases the reset at attach.
+No script. Possible now that the patched dwmac-sun8i survives the failed probe-time reset.
