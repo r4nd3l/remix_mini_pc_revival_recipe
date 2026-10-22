@@ -329,6 +329,44 @@ Do not poke the AC200 over I2C by hand while the kernel drivers own it: it is pa
 through register 0xfe and the kernel caches the page, so a stray write leaves it on the
 wrong page. Read it through `/sys/kernel/debug/regmap/1-0010-AC200/registers` instead.
 
+### 5. One Wi-Fi supplicant, not three
+
+An Armbian image that has been set up more than once can end up with three
+`wpa_supplicant`s, and two of them fight over `wlan0`:
+
+```
+systemctl list-units --all '*wpa*'
+  netplan-wpa-wlan0.service      netplan's own, from the Wi-Fi in /etc/netplan/*.yaml
+  wpa_supplicant@wlan0.service   the per-interface one, /etc/wpa_supplicant/wpa_supplicant-wlan0.conf
+  wpa_supplicant.service         the D-Bus one, for NetworkManager
+```
+
+On this board the netplan copy still held an old network the board was no longer
+near. It retried every ~11 s (`Association request to the driver failed`) and, at
+boot, dropped the link the other one had just made (`No network configuration found
+for the current AP` → `CTRL-EVENT-DISCONNECTED ... locally_generated=1`). Find out
+which one actually holds the link before touching anything:
+
+```
+for u in netplan-wpa-wlan0 wpa_supplicant@wlan0 wpa_supplicant; do
+  echo "$u: pid $(systemctl show -p MainPID --value $u)"; done
+journalctl -b | grep -E 'wpa_supplicant\[[0-9]+\].*CTRL-EVENT-CONNECTED'   # the pid that connected
+```
+
+Here it was `wpa_supplicant@wlan0`. Keep that one and stop the other two:
+
+```
+sudo systemctl mask --now netplan-wpa-wlan0.service   # generated from netplan at every boot: mask, not disable
+sudo systemctl disable --now wpa_supplicant.service   # nothing uses D-Bus Wi-Fi without NetworkManager
+systemctl is-active netplan-wpa-wlan0 wpa_supplicant wpa_supplicant@wlan0   # inactive inactive active
+ip -br addr show dev wlan0                            # still has its address
+```
+
+Mask rather than delete the Wi-Fi from netplan: netplan also writes the networkd
+config that gives `wlan0` its DHCP address, and that part is still wanted. A later
+`netplan apply` will complain that it cannot start the masked unit; that is expected.
+Undo with `sudo systemctl unmask netplan-wpa-wlan0 && sudo systemctl enable --now wpa_supplicant`.
+
 ## Known limitation: no audio
 
 The analog codec probes and the mixer works, but playback and capture fail
