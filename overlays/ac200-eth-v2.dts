@@ -1,0 +1,194 @@
+/dts-v1/;
+
+/ {
+
+	fragment@0 {
+		target-path = "/";
+
+		__overlay__ {
+
+			ac200-clk {
+				compatible = "fixed-clock";
+				#clock-cells = <0x00>;
+				clock-frequency = <0x16e3600>;
+				phandle = <0x01>;
+			};
+		};
+	};
+
+	fragment@1 {
+		target = <0xffffffff>;
+
+		__overlay__ {
+
+			mii-pins {
+				pins = "PD8\0PD9\0PD10\0PD11\0PD12\0PD13\0PD14\0PD15\0PD16\0PD17\0PD18\0PD19\0PD20\0PD21\0PD22\0PD23";
+				function = "emac";
+				drive-strength = <0x28>;
+				phandle = <0x05>;
+			};
+		};
+	};
+
+	fragment@2 {
+		target = <0xffffffff>;
+
+		__overlay__ {
+
+			ephy-calib@2c {
+				reg = <0x2c 0x02>;
+				phandle = <0x03>;
+			};
+
+			ac200-bg@30 {
+				reg = <0x30 0x02>;
+				phandle = <0x02>;
+			};
+		};
+	};
+
+	fragment@3 {
+		target = <0xffffffff>;
+
+		__overlay__ {
+			regulator-min-microvolt = <0x2625a0>;
+			regulator-max-microvolt = <0x2625a0>;
+			regulator-always-on;
+			regulator-name = "vcc-ephy-2v5";
+		};
+	};
+
+	fragment@4 {
+		target = <0xffffffff>;
+
+		__overlay__ {
+			regulator-min-microvolt = <0x1b7740>;
+			regulator-max-microvolt = <0x1b7740>;
+			regulator-always-on;
+			regulator-name = "vcc-ephy-1v8";
+		};
+	};
+
+	fragment@5 {
+		target = <0xffffffff>;
+
+		__overlay__ {
+			regulator-min-microvolt = <0x124f80>;
+			regulator-max-microvolt = <0x124f80>;
+			regulator-always-on;
+			regulator-name = "vcc-ephy-1v2";
+		};
+	};
+
+	fragment@6 {
+		target = <0xffffffff>;
+
+		__overlay__ {
+			#address-cells = <0x01>;
+			#size-cells = <0x00>;
+
+			mfd@10 {
+				compatible = "x-powers,ac200";
+				reg = <0x10>;
+				clocks = <0x01>;
+				interrupt-controller;
+				#interrupt-cells = <0x01>;
+				nvmem-cells = <0x02>;
+				nvmem-cell-names = "bandgap";
+				phandle = <0x07>;
+
+				syscon {
+					compatible = "x-powers,ac200-ephy-ctl";
+					nvmem-cells = <0x03>;
+					nvmem-cell-names = "calibration";
+					#clock-cells = <0x00>;
+					#reset-cells = <0x00>;
+					phy-mode = "mii";
+					x-powers,led-polarity = <0x00>;
+					phy-address = <0x01>;
+					status = "okay";
+					phandle = <0x04>;
+				};
+			};
+		};
+	};
+
+	fragment@7 {
+		target = <0xffffffff>;
+
+		__overlay__ {
+
+			ethernet-phy@1 {
+				compatible = "ethernet-phy-id0044.1400\0ethernet-phy-ieee802.3-c22";
+				reg = <0x01>;
+				phandle = <0x06>;
+			};
+		};
+	};
+
+	fragment@8 {
+		target = <0xffffffff>;
+
+		__overlay__ {
+			pinctrl-names = "default";
+			pinctrl-0 = <0x05>;
+			phy-mode = "mii";
+			phy-handle = <0x06>;
+			phy-supply = <0xffffffff>;
+			status = "okay";
+		};
+	};
+
+	__symbols__ {
+		ac200_clk = "/fragment@0/__overlay__/ac200-clk";
+		mii_pins = "/fragment@1/__overlay__/mii-pins";
+		ephy_calib = "/fragment@2/__overlay__/ephy-calib@2c";
+		ac200_bg = "/fragment@2/__overlay__/ac200-bg@30";
+		ac200 = "/fragment@6/__overlay__/mfd@10";
+		ac200_ephy_ctl = "/fragment@6/__overlay__/mfd@10/syscon";
+		ext_ephy = "/fragment@7/__overlay__/ethernet-phy@1";
+	};
+
+	__fixups__ {
+		pio = "/fragment@1:target:0";
+		sid = "/fragment@2:target:0";
+		reg_dldo2 = "/fragment@3:target:0\0/fragment@8/__overlay__:phy-supply:0";
+		reg_eldo2 = "/fragment@4:target:0";
+		reg_fldo1 = "/fragment@5:target:0";
+		i2c0 = "/fragment@6:target:0";
+		mdio = "/fragment@7:target:0";
+		emac = "/fragment@8:target:0";
+	};
+
+	__local_fixups__ {
+
+		fragment@6 {
+
+			__overlay__ {
+
+				mfd@10 {
+					clocks = <0x00>;
+					nvmem-cells = <0x00>;
+
+					syscon {
+						nvmem-cells = <0x00>;
+					};
+				};
+			};
+		};
+
+		fragment@7 {
+
+			__overlay__ {
+			};
+		};
+
+		fragment@8 {
+
+			__overlay__ {
+				pinctrl-0 = <0x00>;
+				phy-handle = <0x00>;
+			};
+		};
+	};
+};

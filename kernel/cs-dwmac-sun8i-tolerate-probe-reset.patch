@@ -1,0 +1,29 @@
+From: CoverSurface <noreply@anthropic.com>
+Subject: [PATCH] net: stmmac: sun8i: do not fail the probe on the external-PHY reset
+
+The AC200 EPHY on the Remix Mini PC only drives the RMII clocks once phylib
+has attached and resumed it, which happens on open, not during probe. The
+probe-time soft reset then times out and the whole device is torn down,
+although the MAC works fine once the interface is opened.
+
+Warn and carry on instead.
+
+---
+ drivers/net/ethernet/stmicro/stmmac/dwmac-sun8i.c | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/drivers/net/ethernet/stmicro/stmmac/dwmac-sun8i.c b/drivers/net/ethernet/stmicro/stmmac/dwmac-sun8i.c
+--- a/drivers/net/ethernet/stmicro/stmmac/dwmac-sun8i.c
++++ b/drivers/net/ethernet/stmicro/stmmac/dwmac-sun8i.c
+@@ -1226,9 +1226,10 @@ static int sun8i_dwmac_probe(struct platform_device *pdev)
+ 			goto dwmac_mux;
+ 		}
+ 	} else {
++		/* ponytail: an external PHY may not clock the MAC until open */
+ 		ret = sun8i_dwmac_reset(priv);
+ 		if (ret)
+-			goto dwmac_remove;
++			dev_warn(&pdev->dev, "probe-time reset failed, continuing\n");
+ 	}
+ 
+ 	pm_runtime_put(&pdev->dev);

@@ -1,0 +1,13 @@
+# Wired Ethernet (AC200 EPHY, overlay v6): DHCP, preferred over Wi-Fi (wlan0 has metric 600),
+# which stays up as the fallback. RequiredForOnline=no: boot never waits on the cable.
+[Match]
+Name=eth0
+
+[Link]
+RequiredForOnline=no
+
+[Network]
+DHCP=yes
+
+[DHCPv4]
+RouteMetric=100
